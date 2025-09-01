@@ -4,7 +4,7 @@ const UserPreference = require('../models/UserPreference');
 const getUserPreferences = async (req, res) => {
   try {
     const preferences = await UserPreference.findOne({ userId: req.user._id });
-    
+
     if (!preferences) {
       return res.status(404).json({ error: 'Preferences not found' });
     }
@@ -16,32 +16,18 @@ const getUserPreferences = async (req, res) => {
   }
 };
 
-// Create or update user preferences
+// Create or update user preferences - SIMPLIFIED VERSION
 const updateUserPreferences = async (req, res) => {
   try {
-    const { climate, budget, adventure, culture, nature, nightlife } = req.body;
-
-    // Validate input
-    const factors = [climate, budget, adventure, culture, nature, nightlife];
-    for (let factor of factors) {
-      if (factor < 1 || factor > 5) {
-        return res.status(400).json({ error: 'All preference values must be between 1 and 5' });
-      }
-    }
-
-    // Find and update preferences (upsert)
+    // Just store whatever data comes in without validation
     const preferences = await UserPreference.findOneAndUpdate(
       { userId: req.user._id },
       {
         userId: req.user._id,
-        climate,
-        budget,
-        adventure,
-        culture,
-        nature,
-        nightlife
+        ...req.body, // Store all incoming data as-is
+        updatedAt: new Date()
       },
-      { upsert: true, new: true, runValidators: true }
+      { upsert: true, new: true }
     );
 
     res.json({
@@ -58,7 +44,7 @@ const updateUserPreferences = async (req, res) => {
 const deleteUserPreferences = async (req, res) => {
   try {
     await UserPreference.findOneAndDelete({ userId: req.user._id });
-    
+
     res.json({ message: 'Preferences deleted successfully' });
   } catch (error) {
     console.error('Delete preferences error:', error);
