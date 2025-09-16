@@ -3,45 +3,28 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-}
+import { useAuth } from '../../hooks/useAuth';
+import ProtectedRoute from '../../components/ProtectedRoute';
 
 export default function Dashboard() {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [quickRecommendations, setQuickRecommendations] = useState<any[]>([]);
   const [hasPreferences, setHasPreferences] = useState(false);
+  const { user, logout, isAuthenticated } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    // Check if user is logged in
-    const token = localStorage.getItem('token');
-    const userData = localStorage.getItem('user');
-
-    if (!token || !userData) {
-      router.push('/auth/login');
-      return;
-    }
-
-    try {
-      setUser(JSON.parse(userData));
+    if (isAuthenticated && user) {
       loadQuickRecommendations();
-    } catch (error) {
-      console.error('Error parsing user data:', error);
-      router.push('/auth/login');
-    } finally {
-      setIsLoading(false);
     }
-  }, [router]);
+  }, [isAuthenticated, user]);
 
   const loadQuickRecommendations = async () => {
+    if (!user) return;
+    
     try {
       const token = localStorage.getItem('token');
-      
+      if (!token) return;
+
       // First check if user has preferences
       const prefsResponse = await fetch('http://localhost:5000/api/preferences', {
         headers: {
@@ -74,28 +57,13 @@ export default function Dashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    router.push('/');
+    logout();
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading your dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gray-50">
       {/* Navigation Header */}
       <nav className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -106,10 +74,10 @@ export default function Dashboard() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <span className="text-xl font-bold text-gray-900">TravelAI Dashboard</span>
+              <span className="text-lg sm:text-xl font-bold text-gray-900">TravelAI</span>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">Welcome, {user.name}</span>
+            <div className="hidden md:flex items-center space-x-4">
+              <span className="text-sm text-gray-600">Welcome, {user?.name || 'User'}</span>
               <Link
                 href="/dashboard/profile"
                 className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
@@ -123,6 +91,32 @@ export default function Dashboard() {
                 Sign Out
               </button>
             </div>
+            {/* Mobile menu button */}
+            <div className="md:hidden">
+              <button className="text-gray-600 hover:text-gray-900 p-2">
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {/* Mobile menu */}
+          <div className="md:hidden border-t border-gray-200 py-4">
+            <div className="flex flex-col space-y-2">
+              <span className="text-sm text-gray-600 px-3 py-2">Welcome, {user?.name || 'User'}</span>
+              <Link
+                href="/dashboard/profile"
+                className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                Profile
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors text-left"
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </nav>
@@ -132,7 +126,7 @@ export default function Dashboard() {
         {/* Welcome Section */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Welcome back, {user.name}! 👋
+            Welcome back, {user?.name || 'User'}! 👋
           </h1>
           <p className="text-gray-600">
             Ready to discover your next travel destination? Let's get started with your preferences.
@@ -197,9 +191,9 @@ export default function Dashboard() {
             >
               Browse Destinations
             </Link>
-          </div>
-x
-          {/* Travel History */}
+            </div>
+
+            {/* Travel History */}
           <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 hover:shadow-md transition-shadow">
             <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
               <svg className="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -265,5 +259,6 @@ x
         </div>
       </div>
     </div>
+    </ProtectedRoute>
   );
 }

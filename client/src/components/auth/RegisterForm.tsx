@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { validateForm, validationRules, sanitizeEmail, sanitizeString, ValidationErrors } from '../../lib/validation';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function RegisterForm() {
   const [formData, setFormData] = useState({
@@ -13,14 +15,29 @@ export default function RegisterForm() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<ValidationErrors>({});
   const router = useRouter();
+  const { login } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    const sanitizedValue = name === 'email' ? sanitizeEmail(value) : 
+                          name === 'name' ? sanitizeString(value) : value;
+    
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: sanitizedValue
     });
-    setError(''); // Clear error when user types
+    
+    // Clear field error when user types
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+    setError(''); // Clear general error when user types
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -28,16 +45,24 @@ export default function RegisterForm() {
     setIsLoading(true);
     setError('');
 
-    // Validate passwords match
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
-      setIsLoading(false);
-      return;
-    }
+    // Validate form
+    const errors = validateForm(formData, {
+      name: validationRules.name,
+      email: validationRules.email,
+      password: validationRules.password,
+      confirmPassword: {
+        required: true,
+        custom: (value: string) => {
+          if (value !== formData.password) {
+            return 'Passwords do not match';
+          }
+          return null;
+        }
+      }
+    });
 
-    // Validate password length
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters long');
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       setIsLoading(false);
       return;
     }
@@ -61,9 +86,8 @@ export default function RegisterForm() {
         throw new Error(data.error || 'Registration failed');
       }
 
-      // Store token in localStorage
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      // Use auth hook to store token and user
+      login(data.user, data.token);
 
       // Redirect to dashboard
       router.push('/dashboard');

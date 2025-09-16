@@ -8,18 +8,19 @@ const {
   updateDestination,
   deleteDestination
 } = require('../controllers/destinationController');
+const { cacheMiddleware, invalidateCache, CACHE_TTL } = require('../middleware/cache');
 
 const router = express.Router();
 
-// Public routes
-router.get('/', getAllDestinations);
-router.get('/search', searchDestinations);
-router.get('/popular', getPopularDestinations);
-router.get('/:id', getDestinationById);
+// Public routes with caching
+router.get('/', cacheMiddleware(CACHE_TTL.MEDIUM), getAllDestinations);
+router.get('/search', cacheMiddleware(CACHE_TTL.SHORT), searchDestinations);
+router.get('/popular', cacheMiddleware(CACHE_TTL.LONG), getPopularDestinations);
+router.get('/:id', cacheMiddleware(CACHE_TTL.MEDIUM), getDestinationById);
 
-// Admin routes (you can add admin middleware later)
-router.post('/', createDestination);
-router.put('/:id', updateDestination);
-router.delete('/:id', deleteDestination);
+// Admin routes with cache invalidation
+router.post('/', invalidateCache('^/api/destinations'), createDestination);
+router.put('/:id', invalidateCache('^/api/destinations'), updateDestination);
+router.delete('/:id', invalidateCache('^/api/destinations'), deleteDestination);
 
 module.exports = router;

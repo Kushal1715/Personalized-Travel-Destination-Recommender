@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { validateForm, validationRules, sanitizeEmail, ValidationErrors } from '../../lib/validation';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function LoginForm() {
   const [formData, setFormData] = useState({
@@ -11,20 +13,46 @@ export default function LoginForm() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<ValidationErrors>({});
   const router = useRouter();
+  const { login } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    const sanitizedValue = name === 'email' ? sanitizeEmail(value) : value;
+    
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: sanitizedValue
     });
-    setError(''); // Clear error when user types
+    
+    // Clear field error when user types
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+    setError(''); // Clear general error when user types
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+
+    // Validate form
+    const errors = validateForm(formData, {
+      email: validationRules.email,
+      password: { required: true, minLength: 6 }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch('http://localhost:5000/api/users/login', {
@@ -41,9 +69,8 @@ export default function LoginForm() {
         throw new Error(data.error || 'Login failed');
       }
 
-      // Store token in localStorage
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      // Use auth hook to store token and user
+      login(data.user, data.token);
 
       // Redirect to dashboard
       router.push('/dashboard');
@@ -74,9 +101,14 @@ export default function LoginForm() {
           required
           value={formData.email}
           onChange={handleChange}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+            fieldErrors.email ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
+          }`}
           placeholder="Enter your email"
         />
+        {fieldErrors.email && (
+          <p className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>
+        )}
       </div>
 
       <div>
@@ -91,9 +123,14 @@ export default function LoginForm() {
           required
           value={formData.password}
           onChange={handleChange}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+            fieldErrors.password ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
+          }`}
           placeholder="Enter your password"
         />
+        {fieldErrors.password && (
+          <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>
+        )}
       </div>
 
       <div>
