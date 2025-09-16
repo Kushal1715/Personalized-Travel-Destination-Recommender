@@ -24,20 +24,44 @@ interface UsersResponse {
   };
 }
 
-export default function UsersPage() {
+export default function AdminUsersPage() {
+  const [user, setUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [pagination, setPagination] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalUsers: 0,
+    hasNext: false,
+    hasPrev: false
+  });
+  const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    loadUsers();
-  }, [currentPage, searchTerm, roleFilter, statusFilter]);
+    // Check if user is logged in and is admin
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+
+    if (!token || !userData) {
+      router.push('/auth/login');
+      return;
+    }
+
+    try {
+      const parsedUser = JSON.parse(userData);
+      setUser(parsedUser);
+      loadUsers();
+    } catch (error) {
+      console.error('Error parsing user data:', error);
+      router.push('/auth/login');
+    }
+  }, [router, currentPage, searchTerm, roleFilter, statusFilter]);
 
   const loadUsers = async () => {
     try {
@@ -47,9 +71,9 @@ export default function UsersPage() {
       const params = new URLSearchParams({
         page: currentPage.toString(),
         limit: '10',
-        ...(searchTerm && { search: searchTerm }),
-        ...(roleFilter && { role: roleFilter }),
-        ...(statusFilter && { status: statusFilter })
+        search: searchTerm,
+        role: roleFilter,
+        status: statusFilter
       });
 
       const response = await fetch(`http://localhost:5000/api/admin/users?${params}`, {
@@ -78,6 +102,7 @@ export default function UsersPage() {
 
   const updateUser = async (userId: string, updates: Partial<User>) => {
     try {
+      setIsUpdating(userId);
       const token = localStorage.getItem('token');
       
       const response = await fetch(`http://localhost:5000/api/admin/users/${userId}`, {
@@ -90,13 +115,16 @@ export default function UsersPage() {
       });
 
       if (response.ok) {
-        loadUsers(); // Reload users
+        await loadUsers(); // Reload users
       } else {
-        setError('Failed to update user');
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to update user');
       }
     } catch (error) {
       console.error('Error updating user:', error);
       setError('Failed to update user');
+    } finally {
+      setIsUpdating(null);
     }
   };
 
@@ -106,6 +134,7 @@ export default function UsersPage() {
     }
 
     try {
+      setIsUpdating(userId);
       const token = localStorage.getItem('token');
       
       const response = await fetch(`http://localhost:5000/api/admin/users/${userId}`, {
@@ -117,20 +146,23 @@ export default function UsersPage() {
       });
 
       if (response.ok) {
-        loadUsers(); // Reload users
+        await loadUsers(); // Reload users
       } else {
-        setError('Failed to delete user');
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to delete user');
       }
     } catch (error) {
       console.error('Error deleting user:', error);
       setError('Failed to delete user');
+    } finally {
+      setIsUpdating(null);
     }
   };
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setCurrentPage(1);
-    loadUsers();
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    router.push('/');
   };
 
   if (isLoading) {
@@ -149,13 +181,16 @@ export default function UsersPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
+            <svg className="mx-auto h-12 w-12 text-red-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
             <h3 className="text-lg font-medium text-red-900 mb-2">Error</h3>
             <p className="text-red-700 mb-4">{error}</p>
             <button
-              onClick={() => router.push('/admin')}
+              onClick={handleLogout}
               className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
             >
-              Back to Admin
+              Go to Login
             </button>
           </div>
         </div>
@@ -180,12 +215,19 @@ export default function UsersPage() {
               </Link>
             </div>
             <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-600">Welcome, {user?.name}</span>
               <Link
                 href="/admin"
                 className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
               >
                 Dashboard
               </Link>
+              <button
+                onClick={handleLogout}
+                className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                Sign Out
+              </button>
             </div>
           </div>
         </div>
@@ -196,12 +238,12 @@ export default function UsersPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">User Management</h1>
-          <p className="text-gray-600">Manage user accounts and permissions</p>
+          <p className="text-gray-600">Manage user accounts, roles, and permissions</p>
         </div>
 
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
-          <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
               <input
@@ -238,13 +280,18 @@ export default function UsersPage() {
             </div>
             <div className="flex items-end">
               <button
-                type="submit"
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                onClick={() => {
+                  setSearchTerm('');
+                  setRoleFilter('');
+                  setStatusFilter('');
+                  setCurrentPage(1);
+                }}
+                className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
               >
-                Search
+                Clear Filters
               </button>
             </div>
-          </form>
+          </div>
         </div>
 
         {/* Users Table */}
@@ -303,21 +350,24 @@ export default function UsersPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                       <button
                         onClick={() => updateUser(user._id, { role: user.role === 'admin' ? 'user' : 'admin' })}
-                        className="text-blue-600 hover:text-blue-900"
+                        disabled={isUpdating === user._id}
+                        className="text-blue-600 hover:text-blue-900 disabled:opacity-50"
                       >
-                        {user.role === 'admin' ? 'Make User' : 'Make Admin'}
+                        {isUpdating === user._id ? 'Updating...' : user.role === 'admin' ? 'Make User' : 'Make Admin'}
                       </button>
                       <button
                         onClick={() => updateUser(user._id, { isActive: !user.isActive })}
-                        className="text-yellow-600 hover:text-yellow-900"
+                        disabled={isUpdating === user._id}
+                        className="text-yellow-600 hover:text-yellow-900 disabled:opacity-50"
                       >
-                        {user.isActive ? 'Deactivate' : 'Activate'}
+                        {isUpdating === user._id ? 'Updating...' : user.isActive ? 'Deactivate' : 'Activate'}
                       </button>
                       <button
                         onClick={() => deleteUser(user._id)}
-                        className="text-red-600 hover:text-red-900"
+                        disabled={isUpdating === user._id || user.role === 'admin'}
+                        className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Delete
+                        {isUpdating === user._id ? 'Deleting...' : 'Delete'}
                       </button>
                     </td>
                   </tr>
@@ -327,55 +377,59 @@ export default function UsersPage() {
           </div>
 
           {/* Pagination */}
-          {pagination && (
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <button
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={!pagination.hasPrev}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={!pagination.hasNext}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
+          <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+            <div className="flex-1 flex justify-between sm:hidden">
+              <button
+                onClick={() => setCurrentPage(currentPage - 1)}
+                disabled={!pagination.hasPrev}
+                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setCurrentPage(currentPage + 1)}
+                disabled={!pagination.hasNext}
+                className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-gray-700">
+                  Showing{' '}
+                  <span className="font-medium">
+                    {((pagination.currentPage - 1) * 10) + 1}
+                  </span>{' '}
+                  to{' '}
+                  <span className="font-medium">
+                    {Math.min(pagination.currentPage * 10, pagination.totalUsers)}
+                  </span>{' '}
+                  of{' '}
+                  <span className="font-medium">{pagination.totalUsers}</span>{' '}
+                  results
+                </p>
               </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-gray-700">
-                    Showing <span className="font-medium">{((currentPage - 1) * 10) + 1}</span> to{' '}
-                    <span className="font-medium">
-                      {Math.min(currentPage * 10, pagination.totalUsers)}
-                    </span>{' '}
-                    of <span className="font-medium">{pagination.totalUsers}</span> results
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                    <button
-                      onClick={() => setCurrentPage(currentPage - 1)}
-                      disabled={!pagination.hasPrev}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() => setCurrentPage(currentPage + 1)}
-                      disabled={!pagination.hasNext}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
-                  </nav>
-                </div>
+              <div>
+                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                  <button
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={!pagination.hasPrev}
+                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={!pagination.hasNext}
+                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </nav>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

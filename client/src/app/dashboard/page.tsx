@@ -110,6 +110,12 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600">Welcome, {user.name}</span>
+              <Link
+                href="/dashboard/profile"
+                className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                Profile
+              </Link>
               <button
                 onClick={handleLogout}
                 className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
@@ -190,6 +196,25 @@ export default function Dashboard() {
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 transition-colors"
             >
               Browse Destinations
+            </Link>
+          </div>
+x
+          {/* Travel History */}
+          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 hover:shadow-md transition-shadow">
+            <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
+              <svg className="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Travel History</h3>
+            <p className="text-gray-600 mb-4">
+              Track your travel experiences, rate destinations, and build your personal travel profile.
+            </p>
+            <Link
+              href="/dashboard/travel-history"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 transition-colors"
+            >
+              View Travel History
             </Link>
           </div>
         </div>

@@ -32,6 +32,7 @@ app.use('/api/preferences', require('./routes/preferencesRoutes'));
 app.use('/api/destinations', require('./routes/destinationRoutes'));
 app.use('/api/recommendations', require('./routes/recommendationsRoutes'));
 app.use('/api/travel-history', require('./routes/travelHistoryRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
 
 // 404 handler
 app.use('*', (req, res) => {

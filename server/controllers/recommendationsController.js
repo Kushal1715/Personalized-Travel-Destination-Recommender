@@ -8,6 +8,58 @@ const HybridRecommender = require('../ml/hybridRecommender');
 const cosineRecommender = new CosineSimilarityRecommender();
 const hybridRecommender = new HybridRecommender();
 
+// Helper functions to convert string preferences to numeric values
+function convertClimateToNumeric(climate) {
+  const climateMap = {
+    'Tropical': 5,
+    'Mediterranean': 4,
+    'Temperate': 3,
+    'Continental': 2,
+    'Polar': 1
+  };
+  return climateMap[climate] || 3; // Default to temperate
+}
+
+function convertBudgetToNumeric(budget) {
+  const budgetMap = {
+    'Budget': 1,
+    'Moderate': 3,
+    'Luxury': 5
+  };
+  return budgetMap[budget] || 3; // Default to moderate
+}
+
+function calculateAdventureScore(travelStyle, interests) {
+  let score = 0;
+  if (travelStyle && travelStyle.includes('Adventure')) score += 3;
+  if (interests && interests.includes('Mountains')) score += 2;
+  if (interests && interests.includes('Sports')) score += 1;
+  return Math.min(score, 5); // Cap at 5
+}
+
+function calculateCultureScore(travelStyle, interests) {
+  let score = 0;
+  if (travelStyle && travelStyle.includes('Cultural')) score += 3;
+  if (interests && interests.includes('History')) score += 2;
+  if (interests && interests.includes('Art')) score += 1;
+  return Math.min(score, 5); // Cap at 5
+}
+
+function calculateNatureScore(interests) {
+  let score = 0;
+  if (interests && interests.includes('Nature')) score += 3;
+  if (interests && interests.includes('Mountains')) score += 2;
+  if (interests && interests.includes('Beaches')) score += 1;
+  return Math.min(score, 5); // Cap at 5
+}
+
+function calculateNightlifeScore(interests) {
+  let score = 0;
+  if (interests && interests.includes('Nightlife')) score += 3;
+  if (interests && interests.includes('Food')) score += 1;
+  return Math.min(score, 5); // Cap at 5
+}
+
 // Get personalized recommendations for user
 const getPersonalizedRecommendations = async (req, res) => {
   try {
@@ -30,11 +82,21 @@ const getPersonalizedRecommendations = async (req, res) => {
 
     let recommendations = [];
 
+    // Convert string preferences to numeric values for ML algorithms
+    const numericPreferences = {
+      climate: convertClimateToNumeric(userPreferences.preferredClimate),
+      budget: convertBudgetToNumeric(userPreferences.budget),
+      adventure: calculateAdventureScore(userPreferences.travelStyle, userPreferences.interests),
+      culture: calculateCultureScore(userPreferences.travelStyle, userPreferences.interests),
+      nature: calculateNatureScore(userPreferences.interests),
+      nightlife: calculateNightlifeScore(userPreferences.interests)
+    };
+
     // Generate recommendations based on algorithm
     if (algorithm === 'cosine') {
-      recommendations = cosineRecommender.getRecommendations(userPreferences, destinations, limit);
+      recommendations = cosineRecommender.getRecommendations(numericPreferences, destinations, limit);
     } else if (algorithm === 'hybrid') {
-      recommendations = hybridRecommender.getRecommendations(userPreferences, destinations, limit);
+      recommendations = hybridRecommender.getRecommendations(numericPreferences, destinations, limit);
     } else {
       return res.status(400).json({ error: 'Invalid algorithm. Use "cosine" or "hybrid"' });
     }
@@ -63,12 +125,13 @@ const getPersonalizedRecommendations = async (req, res) => {
       algorithm,
       recommendations,
       userPreferences: {
-        climate: userPreferences.climate,
-        budget: userPreferences.budget,
-        adventure: userPreferences.adventure,
-        culture: userPreferences.culture,
-        nature: userPreferences.nature,
-        nightlife: userPreferences.nightlife
+        original: {
+          budget: userPreferences.budget,
+          travelStyle: userPreferences.travelStyle,
+          interests: userPreferences.interests,
+          preferredClimate: userPreferences.preferredClimate
+        },
+        converted: numericPreferences
       }
     });
 

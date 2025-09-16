@@ -351,9 +351,12 @@ export default function RecommendationsPage() {
 
                   {/* Action Buttons */}
                   <div className="flex space-x-2">
-                    <button className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors">
+                    <Link
+                      href={`/dashboard/destinations/${recommendation.destinationId._id}`}
+                      className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors text-center"
+                    >
                       View Details
-                    </button>
+                    </Link>
                     <button className="px-3 py-2 border border-gray-300 text-gray-700 text-sm rounded-md hover:bg-gray-50 transition-colors">
                       Share
                     </button>
