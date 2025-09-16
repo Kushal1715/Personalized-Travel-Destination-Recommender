@@ -13,6 +13,8 @@ interface User {
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [quickRecommendations, setQuickRecommendations] = useState<any[]>([]);
+  const [hasPreferences, setHasPreferences] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -27,6 +29,7 @@ export default function Dashboard() {
 
     try {
       setUser(JSON.parse(userData));
+      loadQuickRecommendations();
     } catch (error) {
       console.error('Error parsing user data:', error);
       router.push('/auth/login');
@@ -34,6 +37,41 @@ export default function Dashboard() {
       setIsLoading(false);
     }
   }, [router]);
+
+  const loadQuickRecommendations = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      // First check if user has preferences
+      const prefsResponse = await fetch('http://localhost:5000/api/preferences', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (prefsResponse.ok) {
+        setHasPreferences(true);
+        
+        // Get quick recommendations using hybrid algorithm
+        const recResponse = await fetch('http://localhost:5000/api/recommendations/personalized?algorithm=hybrid&limit=3', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (recResponse.ok) {
+          const data = await recResponse.json();
+          setQuickRecommendations(data.recommendations || []);
+        }
+      } else {
+        setHasPreferences(false);
+      }
+    } catch (error) {
+      console.error('Error loading quick recommendations:', error);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -136,25 +174,54 @@ export default function Dashboard() {
             </Link>
           </div>
 
-          {/* View History */}
+          {/* Browse Destinations */}
           <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200 hover:shadow-md transition-shadow">
             <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
               <svg className="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Travel History</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Browse Destinations</h3>
             <p className="text-gray-600 mb-4">
-              Review your past trips and see how our recommendations have performed for you.
+              Explore all available destinations, filter by preferences, and discover new places to visit.
             </p>
             <Link
-              href="/dashboard/history"
+              href="/dashboard/destinations"
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 transition-colors"
             >
-              View History
+              Browse Destinations
             </Link>
           </div>
         </div>
+
+        {/* AI-Powered Quick Recommendations */}
+        {hasPreferences && quickRecommendations.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">🤖 AI-Powered Quick Recommendations</h2>
+              <Link
+                href="/dashboard/recommendations"
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                View All →
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {quickRecommendations.map((rec, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-medium text-gray-900">{rec.destinationName}</h3>
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                      {(rec.finalScore * 100).toFixed(0)}% match
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-2">{rec.destinationCountry}</p>
+                  <p className="text-xs text-gray-500 line-clamp-2">{rec.explanation}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Recent Activity */}
         <div className="bg-white rounded-lg shadow-sm p-6">
@@ -163,7 +230,12 @@ export default function Dashboard() {
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p className="mt-2 text-sm">No recent activity yet. Start by setting your travel preferences!</p>
+            <p className="mt-2 text-sm">
+              {hasPreferences 
+                ? "No recent activity yet. Check out your AI recommendations above!" 
+                : "No recent activity yet. Start by setting your travel preferences!"
+              }
+            </p>
           </div>
         </div>
       </div>

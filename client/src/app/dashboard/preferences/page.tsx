@@ -28,6 +28,9 @@ export default function PreferencesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewRecommendations, setPreviewRecommendations] = useState<any[]>([]);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const router = useRouter();
 
   const [preferences, setPreferences] = useState<TravelPreferences>({
@@ -108,6 +111,44 @@ export default function PreferencesPage() {
       setSaveMessage('Error saving preferences. Please try again.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePreviewRecommendations = async () => {
+    setIsLoadingPreview(true);
+    try {
+      const token = localStorage.getItem('token');
+      
+      // First save preferences temporarily
+      await fetch('http://localhost:5000/api/preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(preferences)
+      });
+
+      // Then get recommendations
+      const response = await fetch('http://localhost:5000/api/recommendations/personalized?algorithm=hybrid&limit=3', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPreviewRecommendations(data.recommendations || []);
+        setShowPreview(true);
+      } else {
+        setSaveMessage('Error generating preview recommendations');
+      }
+    } catch (error) {
+      console.error('Error generating preview:', error);
+      setSaveMessage('Error generating preview recommendations');
+    } finally {
+      setIsLoadingPreview(false);
     }
   };
 
@@ -380,15 +421,62 @@ export default function PreferencesPage() {
 
             {/* Submit Button */}
             <div className="flex justify-center pt-6">
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSaving ? 'Saving...' : 'Save Preferences'}
-              </button>
+              <div className="flex space-x-3">
+                <button
+                  type="button"
+                  onClick={handlePreviewRecommendations}
+                  disabled={isLoadingPreview || isSaving}
+                  className="flex-1 bg-green-600 text-white py-3 px-4 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isLoadingPreview ? 'Generating Preview...' : '🤖 Preview AI Recommendations'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSaving ? 'Saving...' : 'Save Preferences'}
+                </button>
+              </div>
             </div>
           </form>
+
+          {/* AI Preview Section */}
+          {showPreview && previewRecommendations.length > 0 && (
+            <div className="mt-8 bg-green-50 border border-green-200 rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-green-900">🤖 AI Preview - Based on Your Current Preferences</h3>
+                <button
+                  onClick={() => setShowPreview(false)}
+                  className="text-green-600 hover:text-green-800 text-sm font-medium"
+                >
+                  Hide Preview
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {previewRecommendations.map((rec, index) => (
+                  <div key={index} className="bg-white border border-green-200 rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="font-medium text-gray-900">{rec.destinationName}</h4>
+                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                        {(rec.finalScore * 100).toFixed(0)}% match
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-2">{rec.destinationCountry}</p>
+                    <p className="text-xs text-gray-500 line-clamp-2">{rec.explanation}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 text-center">
+                <Link
+                  href="/dashboard/recommendations"
+                  className="text-sm text-green-600 hover:text-green-800 font-medium"
+                >
+                  View Full Recommendations →
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
