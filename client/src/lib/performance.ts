@@ -1,220 +1,309 @@
 // Performance monitoring utilities
-
-interface PerformanceMetric {
-  name: string;
-  value: number;
-  timestamp: number;
-  type: 'navigation' | 'measure' | 'mark';
-}
-
-class PerformanceMonitor {
-  private metrics: PerformanceMetric[] = [];
-  private observers: PerformanceObserver[] = [];
-
-  constructor() {
-    this.initializeObservers();
-  }
-
-  private initializeObservers() {
-    // Observe navigation timing
-    if ('PerformanceObserver' in window) {
-      const navObserver = new PerformanceObserver((list) => {
-        const entries = list.getEntries();
-        entries.forEach((entry) => {
-          if (entry.entryType === 'navigation') {
-            this.recordMetric({
-              name: 'page_load',
-              value: entry.duration,
-              timestamp: Date.now(),
-              type: 'navigation'
-            });
-          }
-        });
-      });
-
-      try {
-        navObserver.observe({ entryTypes: ['navigation'] });
-        this.observers.push(navObserver);
-      } catch (error) {
-        console.warn('Navigation timing not supported:', error);
-      }
-
-      // Observe resource timing
-      const resourceObserver = new PerformanceObserver((list) => {
-        const entries = list.getEntries();
-        entries.forEach((entry) => {
-          if (entry.entryType === 'resource') {
-            this.recordMetric({
-              name: `resource_${entry.name.split('/').pop()}`,
-              value: entry.duration,
-              timestamp: Date.now(),
-              type: 'measure'
-            });
-          }
-        });
-      });
-
-      try {
-        resourceObserver.observe({ entryTypes: ['resource'] });
-        this.observers.push(resourceObserver);
-      } catch (error) {
-        console.warn('Resource timing not supported:', error);
-      }
-    }
-  }
-
-  // Record a custom metric
-  recordMetric(metric: PerformanceMetric) {
-    this.metrics.push(metric);
+export const performanceUtils = {
+  // Measure function execution time
+  measureTime: <T>(fn: () => T, label?: string): T => {
+    const start = performance.now();
+    const result = fn();
+    const end = performance.now();
     
-    // Keep only last 100 metrics
-    if (this.metrics.length > 100) {
-      this.metrics = this.metrics.slice(-100);
+    if (label) {
+      console.log(`${label}: ${(end - start).toFixed(2)}ms`);
     }
-  }
-
-  // Mark a point in time
-  mark(name: string) {
-    if ('performance' in window && 'mark' in performance) {
-      performance.mark(name);
-    }
-  }
-
-  // Measure time between two marks
-  measure(name: string, startMark: string, endMark?: string) {
-    if ('performance' in window && 'measure' in performance) {
-      try {
-        performance.measure(name, startMark, endMark);
-        
-        const measure = performance.getEntriesByName(name, 'measure')[0];
-        if (measure) {
-          this.recordMetric({
-            name,
-            value: measure.duration,
-            timestamp: Date.now(),
-            type: 'measure'
-          });
-        }
-      } catch (error) {
-        console.warn('Performance measure failed:', error);
-      }
-    }
-  }
-
-  // Get performance metrics
-  getMetrics(): PerformanceMetric[] {
-    return [...this.metrics];
-  }
-
-  // Get metrics by name
-  getMetricsByName(name: string): PerformanceMetric[] {
-    return this.metrics.filter(metric => metric.name === name);
-  }
-
-  // Get average metric value
-  getAverageMetric(name: string): number {
-    const metrics = this.getMetricsByName(name);
-    if (metrics.length === 0) return 0;
     
-    const sum = metrics.reduce((acc, metric) => acc + metric.value, 0);
-    return sum / metrics.length;
-  }
+    return result;
+  },
 
-  // Get performance summary
-  getSummary() {
-    const navigationMetrics = this.metrics.filter(m => m.type === 'navigation');
-    const measureMetrics = this.metrics.filter(m => m.type === 'measure');
+  // Measure async function execution time
+  measureTimeAsync: async <T>(fn: () => Promise<T>, label?: string): Promise<T> => {
+    const start = performance.now();
+    const result = await fn();
+    const end = performance.now();
+    
+    if (label) {
+      console.log(`${label}: ${(end - start).toFixed(2)}ms`);
+    }
+    
+    return result;
+  },
+
+  // Create a performance timer
+  createTimer: (label?: string) => {
+    const start = performance.now();
     
     return {
-      totalMetrics: this.metrics.length,
-      navigationMetrics: navigationMetrics.length,
-      measureMetrics: measureMetrics.length,
-      averagePageLoad: this.getAverageMetric('page_load'),
-      recentMetrics: this.metrics.slice(-10)
+      end: () => {
+        const end = performance.now();
+        const duration = end - start;
+        
+        if (label) {
+          console.log(`${label}: ${duration.toFixed(2)}ms`);
+        }
+        
+        return duration;
+      }
     };
-  }
-
-  // Clear all metrics
-  clear() {
-    this.metrics = [];
-  }
-
-  // Cleanup observers
-  disconnect() {
-    this.observers.forEach(observer => observer.disconnect());
-    this.observers = [];
-  }
-}
-
-// Global performance monitor instance
-export const performanceMonitor = new PerformanceMonitor();
-
-// Utility functions
-export const performanceUtils = {
-  // Measure API call performance
-  measureApiCall: async <T>(
-    name: string,
-    apiCall: () => Promise<T>
-  ): Promise<T> => {
-    const startMark = `${name}_start`;
-    const endMark = `${name}_end`;
-    
-    performanceMonitor.mark(startMark);
-    
-    try {
-      const result = await apiCall();
-      performanceMonitor.mark(endMark);
-      performanceMonitor.measure(name, startMark, endMark);
-      return result;
-    } catch (error) {
-      performanceMonitor.mark(endMark);
-      performanceMonitor.measure(`${name}_error`, startMark, endMark);
-      throw error;
-    }
-  },
-
-  // Measure component render time
-  measureRender: (componentName: string, renderFn: () => void) => {
-    const startMark = `${componentName}_render_start`;
-    const endMark = `${componentName}_render_end`;
-    
-    performanceMonitor.mark(startMark);
-    renderFn();
-    performanceMonitor.mark(endMark);
-    performanceMonitor.measure(`${componentName}_render`, startMark, endMark);
-  },
-
-  // Measure image load time
-  measureImageLoad: (imageSrc: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const startMark = `image_${imageSrc.split('/').pop()}_start`;
-      const endMark = `image_${imageSrc.split('/').pop()}_end`;
-      
-      performanceMonitor.mark(startMark);
-      
-      const img = new Image();
-      img.onload = () => {
-        performanceMonitor.mark(endMark);
-        performanceMonitor.measure(`image_load_${imageSrc.split('/').pop()}`, startMark, endMark);
-        resolve();
-      };
-      img.onerror = () => {
-        performanceMonitor.mark(endMark);
-        performanceMonitor.measure(`image_error_${imageSrc.split('/').pop()}`, startMark, endMark);
-        reject(new Error(`Failed to load image: ${imageSrc}`));
-      };
-      img.src = imageSrc;
-    });
   }
 };
 
-// React hook for performance monitoring
-export function usePerformanceMonitor() {
+// React performance hooks
+export const usePerformanceMonitor = (componentName: string) => {
+  const timer = performanceUtils.createTimer(`${componentName} render`);
+  
   return {
-    mark: performanceMonitor.mark.bind(performanceMonitor),
-    measure: performanceMonitor.measure.bind(performanceMonitor),
-    getMetrics: performanceMonitor.getMetrics.bind(performanceMonitor),
-    getSummary: performanceMonitor.getSummary.bind(performanceMonitor),
-    clear: performanceMonitor.clear.bind(performanceMonitor)
+    endRender: () => timer.end()
   };
-}
+};
+
+// Image loading performance
+export const imagePerformance = {
+  // Preload images
+  preloadImages: (urls: string[]): Promise<void[]> => {
+    return Promise.all(
+      urls.map(url => {
+        return new Promise<void>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve();
+          img.onerror = reject;
+          img.src = url;
+        });
+      })
+    );
+  },
+
+  // Lazy load images with intersection observer
+  lazyLoadImages: (selector: string = 'img[data-src]') => {
+    if (typeof window === 'undefined') return;
+
+    const images = document.querySelectorAll(selector);
+    const imageObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const img = entry.target as HTMLImageElement;
+          img.src = img.dataset.src || '';
+          img.classList.remove('lazy');
+          imageObserver.unobserve(img);
+        }
+      });
+    });
+
+    images.forEach(img => imageObserver.observe(img));
+  }
+};
+
+// Bundle size monitoring
+export const bundleSize = {
+  // Get current bundle size (approximate)
+  getCurrentSize: (): number => {
+    if (typeof window === 'undefined') return 0;
+    
+    const scripts = document.querySelectorAll('script[src]');
+    let totalSize = 0;
+    
+    scripts.forEach(script => {
+      const src = script.getAttribute('src');
+      if (src && src.includes('_next/static')) {
+        // This is a rough estimate - in reality you'd need to fetch the actual file size
+        totalSize += 100000; // Assume 100KB per script
+      }
+    });
+    
+    return totalSize;
+  },
+
+  // Monitor bundle size changes
+  monitorSize: (callback: (size: number) => void) => {
+    if (typeof window === 'undefined') return;
+    
+    const checkSize = () => {
+      const size = bundleSize.getCurrentSize();
+      callback(size);
+    };
+    
+    // Check on load
+    checkSize();
+    
+    // Check on route changes (for SPA)
+    window.addEventListener('popstate', checkSize);
+    
+    return () => {
+      window.removeEventListener('popstate', checkSize);
+    };
+  }
+};
+
+// Memory usage monitoring
+export const memoryMonitor = {
+  // Get memory usage (if available)
+  getMemoryUsage: (): any => {
+    if (typeof window === 'undefined' || !('memory' in performance)) {
+      return null;
+    }
+    
+    return (performance as any).memory;
+  },
+
+  // Monitor memory usage
+  monitorMemory: (callback: (usage: any) => void) => {
+    if (typeof window === 'undefined') return;
+    
+    const checkMemory = () => {
+      const usage = memoryMonitor.getMemoryUsage();
+      if (usage) {
+        callback(usage);
+      }
+    };
+    
+    // Check every 30 seconds
+    const interval = setInterval(checkMemory, 30000);
+    
+    return () => clearInterval(interval);
+  }
+};
+
+// Network performance
+export const networkPerformance = {
+  // Get connection info
+  getConnectionInfo: (): any => {
+    if (typeof window === 'undefined' || !('connection' in navigator)) {
+      return null;
+    }
+    
+    return (navigator as any).connection;
+  },
+
+  // Monitor network changes
+  onNetworkChange: (callback: (connection: any) => void) => {
+    if (typeof window === 'undefined') return;
+    
+    const connection = networkPerformance.getConnectionInfo();
+    if (connection) {
+      connection.addEventListener('change', () => callback(connection));
+    }
+  }
+};
+
+// Performance metrics collection
+export const metrics = {
+  // Collect Web Vitals
+  collectWebVitals: () => {
+    if (typeof window === 'undefined') return;
+    
+    // First Contentful Paint
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if (entry.name === 'first-contentful-paint') {
+          console.log('FCP:', entry.startTime);
+        }
+      }
+    }).observe({ entryTypes: ['paint'] });
+
+    // Largest Contentful Paint
+    new PerformanceObserver((list) => {
+      const entries = list.getEntries();
+      const lastEntry = entries[entries.length - 1];
+      console.log('LCP:', lastEntry.startTime);
+    }).observe({ entryTypes: ['largest-contentful-paint'] });
+
+    // First Input Delay
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        console.log('FID:', entry.processingStart - entry.startTime);
+      }
+    }).observe({ entryTypes: ['first-input'] });
+
+    // Cumulative Layout Shift
+    let clsValue = 0;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if (!(entry as any).hadRecentInput) {
+          clsValue += (entry as any).value;
+        }
+      }
+      console.log('CLS:', clsValue);
+    }).observe({ entryTypes: ['layout-shift'] });
+  },
+
+  // Custom metrics
+  customMetrics: new Map<string, number>(),
+
+  // Record custom metric
+  recordMetric: (name: string, value: number) => {
+    metrics.customMetrics.set(name, value);
+  },
+
+  // Get all metrics
+  getAllMetrics: () => {
+    return Object.fromEntries(metrics.customMetrics);
+  }
+};
+
+// Performance optimization utilities
+export const optimization = {
+  // Debounce function
+  debounce: <T extends (...args: any[]) => any>(
+    func: T,
+    wait: number
+  ): ((...args: Parameters<T>) => void) => {
+    let timeout: NodeJS.Timeout;
+    
+    return (...args: Parameters<T>) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  },
+
+  // Throttle function
+  throttle: <T extends (...args: any[]) => any>(
+    func: T,
+    limit: number
+  ): ((...args: Parameters<T>) => void) => {
+    let inThrottle: boolean;
+    
+    return (...args: Parameters<T>) => {
+      if (!inThrottle) {
+        func(...args);
+        inThrottle = true;
+        setTimeout(() => inThrottle = false, limit);
+      }
+    };
+  },
+
+  // Memoize function
+  memoize: <T extends (...args: any[]) => any>(
+    func: T,
+    keyGenerator?: (...args: Parameters<T>) => string
+  ): T => {
+    const cache = new Map();
+    
+    return ((...args: Parameters<T>) => {
+      const key = keyGenerator ? keyGenerator(...args) : JSON.stringify(args);
+      
+      if (cache.has(key)) {
+        return cache.get(key);
+      }
+      
+      const result = func(...args);
+      cache.set(key, result);
+      
+      return result;
+    }) as T;
+  }
+};
+
+// Initialize performance monitoring
+export const initPerformanceMonitoring = () => {
+  if (typeof window === 'undefined') return;
+  
+  // Collect Web Vitals
+  metrics.collectWebVitals();
+  
+  // Monitor memory usage
+  memoryMonitor.monitorMemory((usage) => {
+    console.log('Memory usage:', usage);
+  });
+  
+  // Monitor network changes
+  networkPerformance.onNetworkChange((connection) => {
+    console.log('Network changed:', connection);
+  });
+};

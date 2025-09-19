@@ -9,6 +9,7 @@ interface VirtualListProps<T> {
   renderItem: (item: T, index: number) => React.ReactNode;
   overscan?: number;
   className?: string;
+  onScroll?: (scrollTop: number) => void;
 }
 
 export default function VirtualList<T>({
@@ -17,40 +18,65 @@ export default function VirtualList<T>({
   containerHeight,
   renderItem,
   overscan = 5,
-  className = ''
+  className = '',
+  onScroll
 }: VirtualListProps<T>) {
   const [scrollTop, setScrollTop] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Calculate visible range
   const visibleRange = useMemo(() => {
-    const startIndex = Math.floor(scrollTop / itemHeight);
+    const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
     const endIndex = Math.min(
-      startIndex + Math.ceil(containerHeight / itemHeight) + overscan,
-      items.length - 1
+      items.length - 1,
+      Math.ceil((scrollTop + containerHeight) / itemHeight) + overscan
     );
     
-    return {
-      start: Math.max(0, startIndex - overscan),
-      end: endIndex
-    };
+    return { startIndex, endIndex };
   }, [scrollTop, itemHeight, containerHeight, items.length, overscan]);
 
   // Get visible items
   const visibleItems = useMemo(() => {
-    return items.slice(visibleRange.start, visibleRange.end + 1);
+    const { startIndex, endIndex } = visibleRange;
+    return items.slice(startIndex, endIndex + 1).map((item, index) => ({
+      item,
+      index: startIndex + index
+    }));
   }, [items, visibleRange]);
-
-  // Handle scroll
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    setScrollTop(e.currentTarget.scrollTop);
-  };
 
   // Calculate total height
   const totalHeight = items.length * itemHeight;
 
   // Calculate offset for visible items
-  const offsetY = visibleRange.start * itemHeight;
+  const offsetY = visibleRange.startIndex * itemHeight;
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const newScrollTop = e.currentTarget.scrollTop;
+    setScrollTop(newScrollTop);
+    onScroll?.(newScrollTop);
+  };
+
+  // Scroll to specific item
+  const scrollToItem = (index: number) => {
+    if (containerRef.current) {
+      const targetScrollTop = index * itemHeight;
+      containerRef.current.scrollTop = targetScrollTop;
+    }
+  };
+
+  // Scroll to top
+  const scrollToTop = () => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  };
+
+  // Scroll to bottom
+  const scrollToBottom = () => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = totalHeight;
+    }
+  };
 
   return (
     <div
@@ -69,12 +95,16 @@ export default function VirtualList<T>({
             right: 0
           }}
         >
-          {visibleItems.map((item, index) => (
+          {visibleItems.map(({ item, index }) => (
             <div
-              key={visibleRange.start + index}
-              style={{ height: itemHeight }}
+              key={index}
+              style={{
+                height: itemHeight,
+                display: 'flex',
+                alignItems: 'center'
+              }}
             >
-              {renderItem(item, visibleRange.start + index)}
+              {renderItem(item, index)}
             </div>
           ))}
         </div>
@@ -83,40 +113,42 @@ export default function VirtualList<T>({
   );
 }
 
-// Hook for virtual list calculations
+// Hook for virtual list state
 export function useVirtualList<T>(
   items: T[],
   itemHeight: number,
   containerHeight: number,
-  overscan: number = 5
+  overscan = 5
 ) {
   const [scrollTop, setScrollTop] = useState(0);
 
   const visibleRange = useMemo(() => {
-    const startIndex = Math.floor(scrollTop / itemHeight);
+    const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
     const endIndex = Math.min(
-      startIndex + Math.ceil(containerHeight / itemHeight) + overscan,
-      items.length - 1
+      items.length - 1,
+      Math.ceil((scrollTop + containerHeight) / itemHeight) + overscan
     );
     
-    return {
-      start: Math.max(0, startIndex - overscan),
-      end: endIndex
-    };
+    return { startIndex, endIndex };
   }, [scrollTop, itemHeight, containerHeight, items.length, overscan]);
 
   const visibleItems = useMemo(() => {
-    return items.slice(visibleRange.start, visibleRange.end + 1);
+    const { startIndex, endIndex } = visibleRange;
+    return items.slice(startIndex, endIndex + 1).map((item, index) => ({
+      item,
+      index: startIndex + index
+    }));
   }, [items, visibleRange]);
 
   const totalHeight = items.length * itemHeight;
-  const offsetY = visibleRange.start * itemHeight;
+  const offsetY = visibleRange.startIndex * itemHeight;
 
   return {
-    visibleItems,
+    scrollTop,
+    setScrollTop,
     visibleRange,
+    visibleItems,
     totalHeight,
-    offsetY,
-    setScrollTop
+    offsetY
   };
 }

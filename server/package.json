@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "seed": "node seeders/seedDatabase.js",
+    "seed:destinations": "node seeders/sampleDestinations.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

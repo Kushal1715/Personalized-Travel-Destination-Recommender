@@ -1,10 +1,10 @@
-// Authentication utilities for client-side
-
 export interface User {
   id: string;
   name: string;
   email: string;
   role?: string;
+  isActive?: boolean;
+  createdAt?: string;
 }
 
 export interface AuthState {
@@ -14,196 +14,192 @@ export interface AuthState {
 }
 
 // Token management
-export const getStoredToken = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('token');
-};
+export const tokenManager = {
+  getToken: (): string | null => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('token');
+  },
 
-export const getStoredUser = (): User | null => {
-  if (typeof window === 'undefined') return null;
-  const userData = localStorage.getItem('user');
-  return userData ? JSON.parse(userData) : null;
-};
+  setToken: (token: string): void => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('token', token);
+  },
 
-export const storeAuth = (token: string, user: User): void => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('token', token);
-  localStorage.setItem('user', JSON.stringify(user));
-};
-
-export const clearAuth = (): void => {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-};
-
-// Token validation
-export const isTokenExpired = (token: string): boolean => {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const currentTime = Date.now() / 1000;
-    return payload.exp < currentTime;
-  } catch {
-    return true;
+  removeToken: (): void => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('token');
   }
 };
 
-export const getTokenExpiration = (token: string): number | null => {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.exp * 1000; // Convert to milliseconds
-  } catch {
-    return null;
+// User management
+export const userManager = {
+  getUser: (): User | null => {
+    if (typeof window === 'undefined') return null;
+    const userData = localStorage.getItem('user');
+    if (!userData) return null;
+    
+    try {
+      return JSON.parse(userData);
+    } catch {
+      return null;
+    }
+  },
+
+  setUser: (user: User): void => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('user', JSON.stringify(user));
+  },
+
+  removeUser: (): void => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('user');
   }
 };
 
-// API request with automatic token refresh
+// API request helper
 export const apiRequest = async (
-  url: string, 
+  url: string,
   options: RequestInit = {}
 ): Promise<Response> => {
-  const token = getStoredToken();
+  const token = tokenManager.getToken();
   
-  if (!token) {
-    throw new Error('No authentication token found');
-  }
-
-  // Check if token is expired
-  if (isTokenExpired(token)) {
-    // Try to refresh token
-    try {
-      const refreshed = await refreshToken();
-      if (refreshed) {
-        // Retry with new token
-        return apiRequest(url, options);
-      } else {
-        // Refresh failed, redirect to login
-        clearAuth();
-        window.location.href = '/auth/login';
-        throw new Error('Token expired and refresh failed');
-      }
-    } catch (error) {
-      clearAuth();
-      window.location.href = '/auth/login';
-      throw error;
-    }
-  }
-
-  const headers = {
+  const defaultHeaders: HeadersInit = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
-    ...options.headers,
   };
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  if (token) {
+    defaultHeaders.Authorization = `Bearer ${token}`;
+  }
 
-  // If token is invalid, try to refresh
+  const config: RequestInit = {
+    ...options,
+    headers: {
+      ...defaultHeaders,
+      ...options.headers,
+    },
+  };
+
+  const response = await fetch(url, config);
+
+  // Handle token expiration
   if (response.status === 401) {
-    try {
-      const refreshed = await refreshToken();
-      if (refreshed) {
-        // Retry with new token
-        return apiRequest(url, options);
-      } else {
-        clearAuth();
-        window.location.href = '/auth/login';
-        throw new Error('Authentication failed');
-      }
-    } catch (error) {
-      clearAuth();
+    tokenManager.removeToken();
+    userManager.removeUser();
+    
+    // Redirect to login if not already there
+    if (typeof window !== 'undefined' && !window.location.pathname.includes('/auth/login')) {
       window.location.href = '/auth/login';
-      throw error;
     }
   }
 
   return response;
 };
 
-// Token refresh
-export const refreshToken = async (): Promise<boolean> => {
-  try {
-    const token = getStoredToken();
-    if (!token) return false;
+// Auth state management
+export const authState = {
+  getInitialState: (): AuthState => {
+    const token = tokenManager.getToken();
+    const user = userManager.getUser();
+    
+    return {
+      user,
+      token,
+      isAuthenticated: !!(token && user)
+    };
+  },
 
-    const response = await fetch('http://localhost:5000/api/users/refresh', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
+  setAuthState: (user: User, token: string): AuthState => {
+    tokenManager.setToken(token);
+    userManager.setUser(user);
+    
+    return {
+      user,
+      token,
+      isAuthenticated: true
+    };
+  },
 
-    if (response.ok) {
-      const data = await response.json();
-      storeAuth(data.token, data.user);
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-};
-
-// Logout with API call
-export const logout = async (): Promise<void> => {
-  try {
-    const token = getStoredToken();
-    if (token) {
-      await fetch('http://localhost:5000/api/users/logout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-    }
-  } catch (error) {
-    console.error('Logout error:', error);
-  } finally {
-    clearAuth();
-  }
-};
-
-// Check authentication status
-export const checkAuth = (): AuthState => {
-  const token = getStoredToken();
-  const user = getStoredUser();
-  
-  if (!token || !user || isTokenExpired(token)) {
-    clearAuth();
+  clearAuthState: (): AuthState => {
+    tokenManager.removeToken();
+    userManager.removeUser();
+    
     return {
       user: null,
       token: null,
-      isAuthenticated: false,
+      isAuthenticated: false
     };
   }
-
-  return {
-    user,
-    token,
-    isAuthenticated: true,
-  };
 };
 
-// Auto-refresh token before expiration
-export const setupTokenRefresh = (): void => {
-  const token = getStoredToken();
-  if (!token) return;
+// Role checking utilities
+export const roleUtils = {
+  hasRole: (user: User | null, role: string): boolean => {
+    return user?.role === role;
+  },
 
-  const expiration = getTokenExpiration(token);
-  if (!expiration) return;
+  isAdmin: (user: User | null): boolean => {
+    return roleUtils.hasRole(user, 'admin');
+  },
 
-  // Refresh token 5 minutes before expiration
-  const refreshTime = expiration - (5 * 60 * 1000);
-  const timeUntilRefresh = refreshTime - Date.now();
+  isUser: (user: User | null): boolean => {
+    return roleUtils.hasRole(user, 'user');
+  },
 
-  if (timeUntilRefresh > 0) {
-    setTimeout(async () => {
-      await refreshToken();
-      setupTokenRefresh(); // Set up next refresh
-    }, timeUntilRefresh);
+  canAccess: (user: User | null, requiredRole?: string): boolean => {
+    if (!user) return false;
+    if (!requiredRole) return true;
+    return roleUtils.hasRole(user, requiredRole);
+  }
+};
+
+// Auth validation
+export const authValidation = {
+  isTokenValid: (token: string): boolean => {
+    if (!token) return false;
+    
+    try {
+      // Basic JWT structure validation
+      const parts = token.split('.');
+      if (parts.length !== 3) return false;
+      
+      // Check if token is expired
+      const payload = JSON.parse(atob(parts[1]));
+      const now = Math.floor(Date.now() / 1000);
+      
+      return payload.exp > now;
+    } catch {
+      return false;
+    }
+  },
+
+  validateUser: (user: User | null): boolean => {
+    if (!user) return false;
+    
+    return !!(
+      user.id &&
+      user.name &&
+      user.email &&
+      user.isActive !== false
+    );
+  }
+};
+
+// Auth persistence
+export const authPersistence = {
+  save: (user: User, token: string): void => {
+    authState.setAuthState(user, token);
+  },
+
+  load: (): AuthState => {
+    return authState.getInitialState();
+  },
+
+  clear: (): void => {
+    authState.clearAuthState();
+  },
+
+  isPersisted: (): boolean => {
+    const state = authState.getInitialState();
+    return state.isAuthenticated && authValidation.validateUser(state.user);
   }
 };

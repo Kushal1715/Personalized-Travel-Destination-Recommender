@@ -13,8 +13,9 @@ const recommendationSchema = new mongoose.Schema({
   },
   algorithm: {
     type: String,
-    enum: ['cosine_similarity', 'ahp', 'hybrid'],
-    required: true
+    required: true,
+    enum: ['cosine', 'hybrid', 'collaborative'],
+    default: 'hybrid'
   },
   score: {
     type: Number,
@@ -23,12 +24,36 @@ const recommendationSchema = new mongoose.Schema({
     max: [1, 'Score cannot exceed 1']
   },
   factors: {
-    climate: Number,
-    budget: Number,
-    adventure: Number,
-    culture: Number,
-    nature: Number,
-    nightlife: Number
+    climate: {
+      type: Number,
+      min: [0, 'Climate factor cannot be negative'],
+      max: [1, 'Climate factor cannot exceed 1']
+    },
+    budget: {
+      type: Number,
+      min: [0, 'Budget factor cannot be negative'],
+      max: [1, 'Budget factor cannot exceed 1']
+    },
+    adventure: {
+      type: Number,
+      min: [0, 'Adventure factor cannot be negative'],
+      max: [1, 'Adventure factor cannot exceed 1']
+    },
+    culture: {
+      type: Number,
+      min: [0, 'Culture factor cannot be negative'],
+      max: [1, 'Culture factor cannot exceed 1']
+    },
+    nature: {
+      type: Number,
+      min: [0, 'Nature factor cannot be negative'],
+      max: [1, 'Nature factor cannot exceed 1']
+    },
+    nightlife: {
+      type: Number,
+      min: [0, 'Nightlife factor cannot be negative'],
+      max: [1, 'Nightlife factor cannot exceed 1']
+    }
   },
   explanation: {
     type: String,
@@ -45,14 +70,33 @@ const recommendationSchema = new mongoose.Schema({
   generatedAt: {
     type: Date,
     default: Date.now
+  },
+  viewedAt: {
+    type: Date
+  },
+  bookmarkedAt: {
+    type: Date
   }
 }, {
   timestamps: true
 });
 
 // Create indexes for better query performance
-recommendationSchema.index({ userId: 1, score: -1 });
+recommendationSchema.index({ userId: 1, generatedAt: -1 });
 recommendationSchema.index({ userId: 1, algorithm: 1 });
-recommendationSchema.index({ userId: 1, destinationId: 1 }, { unique: true });
+recommendationSchema.index({ userId: 1, isBookmarked: 1 });
+recommendationSchema.index({ destinationId: 1 });
+recommendationSchema.index({ score: -1 });
+
+// Update viewedAt when isViewed changes
+recommendationSchema.pre('save', function(next) {
+  if (this.isModified('isViewed') && this.isViewed && !this.viewedAt) {
+    this.viewedAt = new Date();
+  }
+  if (this.isModified('isBookmarked') && this.isBookmarked && !this.bookmarkedAt) {
+    this.bookmarkedAt = new Date();
+  }
+  next();
+});
 
 module.exports = mongoose.model('Recommendation', recommendationSchema);

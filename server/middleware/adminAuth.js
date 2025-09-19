@@ -1,41 +1,39 @@
-const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+// Middleware to check if user is admin
 const adminAuth = async (req, res, next) => {
   try {
-    // Get token from header
-    const authHeader = req.header('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Access denied. No token provided.' });
+    // Check if user exists in request (from auth middleware)
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Get user from database to check current role
+    const user = await User.findById(req.user.userId).select('role isActive');
     
-    // Get user from database
-    const user = await User.findById(decoded.userId);
     if (!user) {
-      return res.status(401).json({ error: 'Invalid token. User not found.' });
+      return res.status(401).json({ error: 'User not found' });
     }
 
     // Check if user is active
     if (!user.isActive) {
-      return res.status(401).json({ error: 'Account is deactivated.' });
+      return res.status(403).json({ error: 'Account is deactivated' });
     }
 
-    // Check if user is admin
+    // Check if user has admin role
     if (user.role !== 'admin') {
-      return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+      return res.status(403).json({ 
+        error: 'Admin privileges required',
+        message: 'This action requires administrator access'
+      });
     }
 
-    // Add user to request object
-    req.user = user;
+    // Add admin flag to request
+    req.isAdmin = true;
     next();
   } catch (error) {
     console.error('Admin auth error:', error);
-    res.status(401).json({ error: 'Invalid token.' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 

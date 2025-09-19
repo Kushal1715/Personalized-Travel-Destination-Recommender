@@ -1,7 +1,11 @@
 const express = require('express');
+const router = express.Router();
+const auth = require('../middleware/auth');
+const adminAuth = require('../middleware/adminAuth');
 const {
   getDashboardStats,
   getUsers,
+  getUserById,
   updateUser,
   deleteUser,
   getDestinations,
@@ -10,28 +14,27 @@ const {
   deleteDestination,
   getAnalytics
 } = require('../controllers/adminController');
-const adminAuth = require('../middleware/adminAuth');
 
-const router = express.Router();
-
-// All admin routes require admin authentication
+// All admin routes require authentication and admin privileges
+router.use(auth);
 router.use(adminAuth);
 
-// Dashboard statistics
+// Dashboard
 router.get('/dashboard/stats', getDashboardStats);
+
+// Analytics
+router.get('/analytics', getAnalytics);
 
 // User management
 router.get('/users', getUsers);
-router.patch('/users/:userId', updateUser);
-router.delete('/users/:userId', deleteUser);
+router.get('/users/:id', getUserById);
+router.put('/users/:id', updateUser);
+router.delete('/users/:id', deleteUser);
 
 // Destination management
 router.get('/destinations', getDestinations);
 router.post('/destinations', createDestination);
-router.patch('/destinations/:destinationId', updateDestination);
-router.delete('/destinations/:destinationId', deleteDestination);
-
-// Analytics
-router.get('/analytics', getAnalytics);
+router.put('/destinations/:id', updateDestination);
+router.delete('/destinations/:id', deleteDestination);
 
 module.exports = router;

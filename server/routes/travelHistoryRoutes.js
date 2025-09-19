@@ -1,31 +1,38 @@
 const express = require('express');
-const { 
+const router = express.Router();
+const auth = require('../middleware/auth');
+const {
   getTravelHistory,
   addTravelExperience,
   updateTravelExperience,
   deleteTravelExperience,
-  getTravelStatistics
+  getTravelStatistics,
+  getTravelInsights,
+  searchTravelHistory
 } = require('../controllers/travelHistoryController');
-const authenticateToken = require('../middleware/auth');
-
-const router = express.Router();
 
 // All routes require authentication
-router.use(authenticateToken);
+router.use(auth);
 
-// Get travel history
+// GET /api/travel-history - Get user's travel history
 router.get('/', getTravelHistory);
 
-// Get travel statistics
-router.get('/statistics', getTravelStatistics);
-
-// Add new travel experience
+// POST /api/travel-history - Add new travel experience
 router.post('/', addTravelExperience);
 
-// Update travel experience
-router.put('/:travelHistoryId', updateTravelExperience);
+// GET /api/travel-history/statistics - Get travel statistics
+router.get('/statistics', getTravelStatistics);
 
-// Delete travel experience
-router.delete('/:travelHistoryId', deleteTravelExperience);
+// GET /api/travel-history/insights - Get travel insights
+router.get('/insights', getTravelInsights);
+
+// GET /api/travel-history/search - Search travel history
+router.get('/search', searchTravelHistory);
+
+// PUT /api/travel-history/:id - Update travel experience
+router.put('/:id', updateTravelExperience);
+
+// DELETE /api/travel-history/:id - Delete travel experience
+router.delete('/:id', deleteTravelExperience);
 
 module.exports = router;

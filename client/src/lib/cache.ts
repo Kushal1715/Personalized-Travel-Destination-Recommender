@@ -1,41 +1,48 @@
-// Client-side caching utilities
-
 interface CacheItem<T> {
   data: T;
   timestamp: number;
-  expiresAt: number;
+  ttl: number;
 }
 
-class MemoryCache {
-  private cache = new Map<string, CacheItem<any>>();
-  private maxSize = 100; // Maximum number of items
-  private defaultTTL = 5 * 60 * 1000; // 5 minutes
+interface CacheOptions {
+  ttl?: number; // Time to live in milliseconds
+  maxSize?: number; // Maximum number of items in cache
+}
 
-  set<T>(key: string, data: T, ttl?: number): void {
-    const now = Date.now();
-    const expiresAt = now + (ttl || this.defaultTTL);
+class MemoryCache<T = any> {
+  private cache = new Map<string, CacheItem<T>>();
+  private defaultTTL: number;
+  private maxSize: number;
 
-    // Remove expired items if cache is full
-    if (this.cache.size >= this.maxSize) {
-      this.cleanup();
-    }
-
-    this.cache.set(key, {
-      data,
-      timestamp: now,
-      expiresAt
-    });
+  constructor(options: CacheOptions = {}) {
+    this.defaultTTL = options.ttl || 5 * 60 * 1000; // 5 minutes default
+    this.maxSize = options.maxSize || 100;
   }
 
-  get<T>(key: string): T | null {
-    const item = this.cache.get(key);
-    
-    if (!item) {
-      return null;
+  set(key: string, data: T, ttl?: number): void {
+    const itemTTL = ttl || this.defaultTTL;
+    const item: CacheItem<T> = {
+      data,
+      timestamp: Date.now(),
+      ttl: itemTTL
+    };
+
+    // Remove oldest items if cache is full
+    if (this.cache.size >= this.maxSize) {
+      const oldestKey = this.cache.keys().next().value;
+      this.cache.delete(oldestKey);
     }
 
-    // Check if expired
-    if (Date.now() > item.expiresAt) {
+    this.cache.set(key, item);
+  }
+
+  get(key: string): T | null {
+    const item = this.cache.get(key);
+    
+    if (!item) return null;
+
+    // Check if item has expired
+    if (Date.now() - item.timestamp > item.ttl) {
       this.cache.delete(key);
       return null;
     }
@@ -44,8 +51,7 @@ class MemoryCache {
   }
 
   has(key: string): boolean {
-    const item = this.cache.get(key);
-    return item ? Date.now() <= item.expiresAt : false;
+    return this.get(key) !== null;
   }
 
   delete(key: string): boolean {
@@ -56,65 +62,73 @@ class MemoryCache {
     this.cache.clear();
   }
 
+  size(): number {
+    return this.cache.size;
+  }
+
+  keys(): string[] {
+    return Array.from(this.cache.keys());
+  }
+
+  // Clean up expired items
   cleanup(): void {
     const now = Date.now();
     for (const [key, item] of this.cache.entries()) {
-      if (now > item.expiresAt) {
+      if (now - item.timestamp > item.ttl) {
         this.cache.delete(key);
       }
     }
   }
 
-  size(): number {
-    return this.cache.size;
+  // Get cache statistics
+  getStats() {
+    const now = Date.now();
+    let expired = 0;
+    
+    for (const item of this.cache.values()) {
+      if (now - item.timestamp > item.ttl) {
+        expired++;
+      }
+    }
+
+    return {
+      size: this.cache.size,
+      expired,
+      active: this.cache.size - expired
+    };
   }
 }
 
-// Global cache instance
-export const cache = new MemoryCache();
-
-// Cache keys
-export const CACHE_KEYS = {
-  USER: 'user',
-  PREFERENCES: 'preferences',
-  DESTINATIONS: 'destinations',
-  RECOMMENDATIONS: 'recommendations',
-  TRAVEL_HISTORY: 'travel_history',
-  ADMIN_STATS: 'admin_stats'
-} as const;
-
-// Cache TTL constants (in milliseconds)
-export const CACHE_TTL = {
-  SHORT: 1 * 60 * 1000,      // 1 minute
-  MEDIUM: 5 * 60 * 1000,     // 5 minutes
-  LONG: 15 * 60 * 1000,      // 15 minutes
-  VERY_LONG: 60 * 60 * 1000  // 1 hour
-} as const;
+// Global cache instances
+export const apiCache = new MemoryCache({ ttl: 5 * 60 * 1000, maxSize: 100 });
+export const userCache = new MemoryCache({ ttl: 10 * 60 * 1000, maxSize: 50 });
+export const destinationCache = new MemoryCache({ ttl: 15 * 60 * 1000, maxSize: 200 });
 
 // Cache utilities
 export const cacheUtils = {
-  // Generate cache key with prefix
-  key: (prefix: string, ...parts: (string | number)[]): string => {
-    return `${prefix}:${parts.join(':')}`;
+  // Generate cache key from URL and params
+  generateKey: (url: string, params?: Record<string, any>): string => {
+    const paramString = params ? JSON.stringify(params) : '';
+    return `${url}:${paramString}`;
   },
 
   // Cache API response
   cacheApiResponse: async <T>(
     key: string,
-    fetcher: () => Promise<T>,
-    ttl: number = CACHE_TTL.MEDIUM
+    apiCall: () => Promise<T>,
+    ttl?: number
   ): Promise<T> => {
     // Check cache first
-    const cached = cache.get<T>(key);
-    if (cached !== null) {
-      return cached;
+    const cached = apiCache.get(key);
+    if (cached) {
+      return cached as T;
     }
 
-    // Fetch data
-    const data = await fetcher();
+    // Make API call
+    const data = await apiCall();
     
     // Cache the result
-    cache.set(key, data, ttl);
+    apiCache.set(key, data, ttl);
     
     return data;
   },
@@ -122,23 +136,77 @@ export const cacheUtils = {
   // Invalidate cache by pattern
   invalidatePattern: (pattern: string): void => {
     const regex = new RegExp(pattern);
-    for (const key of cache['cache'].keys()) {
+    const keys = apiCache.keys();
+    
+    keys.forEach(key => {
       if (regex.test(key)) {
-        cache.delete(key);
+        apiCache.delete(key);
       }
-    }
+    });
   },
 
-  // Invalidate user-specific cache
-  invalidateUserCache: (userId: string): void => {
-    cacheUtils.invalidatePattern(`^${CACHE_KEYS.USER}:${userId}`);
-    cacheUtils.invalidatePattern(`^${CACHE_KEYS.PREFERENCES}:${userId}`);
-    cacheUtils.invalidatePattern(`^${CACHE_KEYS.RECOMMENDATIONS}:${userId}`);
-    cacheUtils.invalidatePattern(`^${CACHE_KEYS.TRAVEL_HISTORY}:${userId}`);
+  // Clear all caches
+  clearAll: (): void => {
+    apiCache.clear();
+    userCache.clear();
+    destinationCache.clear();
+  },
+
+  // Cleanup expired items
+  cleanup: (): void => {
+    apiCache.cleanup();
+    userCache.cleanup();
+    destinationCache.cleanup();
   }
 };
 
-// Local storage cache for persistent data
+// React hook for caching
+export const useCache = <T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  options: { ttl?: number; enabled?: boolean } = {}
+) => {
+  const { ttl, enabled = true } = options;
+  
+  const getCachedData = (): T | null => {
+    if (!enabled) return null;
+    return apiCache.get(key);
+  };
+
+  const setCachedData = (data: T): void => {
+    if (!enabled) return;
+    apiCache.set(key, data, ttl);
+  };
+
+  const invalidateCache = (): void => {
+    apiCache.delete(key);
+  };
+
+  return {
+    getCachedData,
+    setCachedData,
+    invalidateCache
+  };
+};
+
+// Cache middleware for API calls
+export const withCache = <T extends any[], R>(
+  fn: (...args: T) => Promise<R>,
+  keyGenerator: (...args: T) => string,
+  options: { ttl?: number } = {}
+) => {
+  return async (...args: T): Promise<R> => {
+    const key = keyGenerator(...args);
+    
+    return cacheUtils.cacheApiResponse(
+      key,
+      () => fn(...args),
+      options.ttl
+    );
+  };
+};
+
+// Local storage cache (for persistence across sessions)
 export const localStorageCache = {
   set: <T>(key: string, data: T, ttl?: number): void => {
     if (typeof window === 'undefined') return;
@@ -146,34 +214,29 @@ export const localStorageCache = {
     const item: CacheItem<T> = {
       data,
       timestamp: Date.now(),
-      expiresAt: Date.now() + (ttl || CACHE_TTL.LONG)
+      ttl: ttl || 24 * 60 * 60 * 1000 // 24 hours default
     };
     
-    try {
-      localStorage.setItem(`cache:${key}`, JSON.stringify(item));
-    } catch (error) {
-      console.warn('Failed to cache data to localStorage:', error);
-    }
+    localStorage.setItem(`cache:${key}`, JSON.stringify(item));
   },
 
   get: <T>(key: string): T | null => {
     if (typeof window === 'undefined') return null;
     
     try {
-      const itemStr = localStorage.getItem(`cache:${key}`);
-      if (!itemStr) return null;
+      const item = localStorage.getItem(`cache:${key}`);
+      if (!item) return null;
       
-      const item: CacheItem<T> = JSON.parse(itemStr);
+      const parsed: CacheItem<T> = JSON.parse(item);
       
       // Check if expired
-      if (Date.now() > item.expiresAt) {
+      if (Date.now() - parsed.timestamp > parsed.ttl) {
         localStorage.removeItem(`cache:${key}`);
         return null;
       }
       
-      return item.data;
-    } catch (error) {
-      console.warn('Failed to retrieve data from localStorage cache:', error);
+      return parsed.data;
+    } catch {
       return null;
     }
   },
@@ -194,3 +257,10 @@ export const localStorageCache = {
     });
   }
 };
+
+// Auto cleanup expired items every 5 minutes
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    cacheUtils.cleanup();
+  }, 5 * 60 * 1000);
+}
