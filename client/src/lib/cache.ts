@@ -27,11 +27,13 @@ class MemoryCache<T = any> {
       ttl: itemTTL
     };
 
-    // Remove oldest items if cache is full
-    if (this.cache.size >= this.maxSize) {
-      const oldestKey = this.cache.keys().next().value;
+  // Remove oldest items if cache is full
+  if (this.cache.size >= this.maxSize) {
+    const oldestKey = this.cache.keys().next().value;
+    if (oldestKey) {
       this.cache.delete(oldestKey);
     }
+  }
 
     this.cache.set(key, item);
   }

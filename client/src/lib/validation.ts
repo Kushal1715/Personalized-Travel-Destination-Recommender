@@ -288,10 +288,10 @@ export const useFormValidation = <T extends Record<string, any>>(
       
       setErrors(prev => ({
         ...prev,
-        [field]: fieldErrors[field] || ''
+        [field as string]: fieldErrors[field as string] || ''
       }));
       
-      return !fieldErrors[field];
+      return !fieldErrors[field as string];
     } else {
       const allErrors = validateForm(data, rules);
       setErrors(allErrors);

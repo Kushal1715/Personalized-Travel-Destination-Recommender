@@ -207,7 +207,10 @@ export const metrics = {
     // First Input Delay
     new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
-        console.log('FID:', entry.processingStart - entry.startTime);
+        const inputEntry = entry as any;
+        if (inputEntry.processingStart) {
+          console.log('FID:', inputEntry.processingStart - inputEntry.startTime);
+        }
       }
     }).observe({ entryTypes: ['first-input'] });
 
